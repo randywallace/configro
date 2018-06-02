@@ -29,9 +29,13 @@ GEM
       safe_yaml (~> 1.0)
     jekyll-archives (2.1.1)
       jekyll (>= 2.4)
+    jekyll-feed (0.9.3)
+      jekyll (~> 3.3)
     jekyll-paginate (1.1.0)
     jekyll-sass-converter (1.5.2)
       sass (~> 3.4)
+    jekyll-seo-tag (2.4.0)
+      jekyll (~> 3.3)
     jekyll-sitemap (1.2.0)
       jekyll (~> 3.3)
     jekyll-watch (2.0.0)
@@ -47,6 +51,10 @@ GEM
       rb-fsevent (~> 0.9, >= 0.9.4)
       rb-inotify (~> 0.9, >= 0.9.7)
     mercenary (0.3.6)
+    minima (2.5.0)
+      jekyll (~> 3.5)
+      jekyll-feed (~> 0.9)
+      jekyll-seo-tag (~> 2.1)
     pathutil (0.16.1)
       forwardable-extended (~> 2.6)
     public_suffix (3.0.2)
@@ -65,7 +73,11 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  jekyll (~> 3.8.2)
+  jekyll-feed (~> 0.6)
   jekyll-whiteglass
+  minima (~> 2.0)
+  tzinfo-data
 
 BUNDLED WITH
    1.16.1
