@@ -1,7 +1,15 @@
 FactoryBot.define do
   factory :static_stringified_hash, class:Hash do
     name "Sebastian"
-    an_array ["white", "orange"]
+
+    trait :allows_arrays do
+      an_array ["white", "orange"]
+    end
+
+    trait :bad_ssm_parameter do
+      send("a-parameter_name.&&.that_is_not_allowed", 'data')
+    end
+
     initialize_with { attributes.stringify_keys }
   end
 
@@ -11,14 +19,19 @@ FactoryBot.define do
     a_number 45
     a_float 3.14
     a_string "foobar"
-    association :some_sub_config,       factory: :static_stringified_hash, strategy: :build, name: "Joseph"
-    association :some_other_sub_config, factory: :static_stringified_hash, strategy: :build, name: "Jessica"
-    association :array_with_hash,       factory: :static_stringified_hash, strategy: :build, an_array: [ { "keyone" => 10 },{ "keytwo" => 11 } ]
+    association :some_sub_config,       :allows_arrays, factory: :static_stringified_hash, strategy: :build, name: "Joseph"
+    association :some_other_sub_config, :allows_arrays, factory: :static_stringified_hash, strategy: :build, name: "Jessica"
+    association :array_with_hash,       :allows_arrays, factory: :static_stringified_hash, strategy: :build, an_array: [ { "keyone" => 10 },{ "keytwo" => 11 } ]
     initialize_with { attributes.stringify_keys }
   end
 
   factory :basic_property_configuration, class:Hash do
     association :global, factory: :static_stringified_hash, strategy: :build, an_array: nil, family: 'Wilson'
+    initialize_with { attributes.stringify_keys }
+  end
+
+  factory :bad_property_configuration, class:Hash do
+    association :global, :bad_ssm_parameter, factory: :static_stringified_hash, strategy: :build, an_array: nil
     initialize_with { attributes.stringify_keys }
   end
 

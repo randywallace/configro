@@ -1,6 +1,9 @@
 require "bundler/setup"
 require "factory_bot"
+require "coveralls"
 require "configruous"
+
+Coveralls.wear!
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

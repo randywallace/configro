@@ -56,7 +56,7 @@ module Configruous
         begin
           existing_param = SSMClient.instance.client.get_parameter(name: param_name).parameter
           if existing_param.value.to_s != config.value.to_s
-            #"Updating #{param_name} by setting #{existing_param.value.to_s} to #{config.value.to_s}"
+            #puts "Updating #{param_name} by setting #{existing_param.value.to_s} to #{config.value.to_s}"
             ssm_client.put_parameter({
               name: param_name,
               value: config.value.to_s,
@@ -65,6 +65,7 @@ module Configruous
             }).inspect
           end
         rescue Aws::SSM::Errors::ParameterNotFound
+          #puts "Parameter not found; Setting #{param_name} to #{config.value.to_s}"
           ssm_client.put_parameter({
             name: param_name,
             value: config.value.to_s,

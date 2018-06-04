@@ -30,4 +30,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rspec", "~> 3.5"
   spec.add_development_dependency "pry"
   spec.add_development_dependency "factory_bot"
+  spec.add_development_dependency "coveralls"
 end
