@@ -1,4 +1,5 @@
 require "bundler/setup"
+require "factory_bot"
 require "configruous"
 
 RSpec.configure do |config|
@@ -11,4 +12,12 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
+
+  # Setup FactoryBot
+  config.before(:suite) do
+    FactoryBot.find_definitions
+  end
+
+  config.include FactoryBot::Syntax::Methods
+
 end
