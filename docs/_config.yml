@@ -10,11 +10,12 @@ github_username:  randywallace
 
 # Build settings
 markdown: kramdown
-theme: jekyll-whiteglass
+#theme: jekyll-whiteglass
 plugins:
   - jekyll-archives
   - jekyll-paginate
   - jekyll-sitemap
+  - jekyll-remote-theme
 
 exclude:
   - Gemfile
