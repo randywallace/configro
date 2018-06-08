@@ -7,13 +7,26 @@ require "ostruct"
 #require 'hashdiff'
 
 module Configruous
+  module Helpers
+    class << self
+      def deep_merge h1, h2
+        # TODO: Handle array merges
+        if h1.respond_to? :merge
+          h1.merge(h2) { |key, h1_elem, h2_elem| deep_merge(h1_elem, h2_elem) }
+        else
+          h1 + h2
+        end
+      end
+    end
+  end
+
   class SSMClient
     include Singleton
 
     attr_reader :client
 
     def initialize
-      # For not apparent reason, the AWS SDK *for ruby*
+      # For no apparent reason, the AWS SDK *for ruby*
       # does not support these environment variables
       if ENV['AWS_CONFIG_FILE'] && ENV['AWS_PROFILE']
         @client = Aws::SSM::Client.new(
@@ -35,16 +48,17 @@ module Configruous
     end
   end
 
-  class BaseLoader 
+  class BaseLoader
 
     attr_accessor :data
     attr_accessor :raw_data
+    attr_accessor :environment
 
-    def initialize filename=nil
+    def initialize filename=nil, options={}
       raise "Do not initialize base Loader class directly" if self.class == BaseLoader
       @filename = filename
       @extension = File.extname(filename)
-      @environment ||= 'prod'
+      @environment = options[:environment] || 'prod'
       @data = Array.new
       load_data @raw_data
     end
@@ -113,17 +127,33 @@ module Configruous
   end
 
   class YAMLLoader < BaseLoader
-    def initialize filename
+    def initialize filename, options={}
       @raw_data = YAML.load_file(filename)
       super
     end
   end
 
   class PropertyLoader < BaseLoader
-    def initialize filename
+    def initialize filename, options={}
       @raw_data = IniFile.load(filename)['global']
       super
     end
   end
+
+  class FileFactory
+    class << self
+      def load(filename)
+        case File.extname(filename)
+        when /\.ya?ml|\.config/
+          YAMLLoader.new(filename)
+        when /\.properties/
+          PropertyLoader.new(filename)
+        else
+          raise ArgumentError.new("#{filename} is not a supported file type")
+        end
+      end
+    end
+  end
+
 end
 

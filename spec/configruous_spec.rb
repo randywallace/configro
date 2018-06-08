@@ -115,6 +115,10 @@ RSpec.describe Configruous do
         expect(client.raw_data).to eql(build(:basic_yaml_configuration))
       end
 
+      it 'sets the environment when given' do
+        expect(Configruous::YAMLLoader.new(filename, environment: 'test').environment).to eql('test')
+      end
+
       it 'converts the data to configurations' do
         expect{client.data}.not_to raise_error
       end
@@ -171,6 +175,51 @@ RSpec.describe Configruous do
       it 'stores a new parameter when one does not already exist' do
         Configruous::SSMClient.instance.client.stub_responses(:get_parameter, Aws::SSM::Errors::ParameterNotFound.new('', ''))
         expect{client.store!}.not_to raise_error
+      end
+    end
+  end
+
+  describe 'FileFactory' do
+    describe '#load' do
+      before(:each) {
+        allow(YAML).to receive(:load_file).with('some_file.yaml').and_return build(:basic_yaml_configuration)
+        allow(IniFile).to receive(:load).with('some_file.properties').and_return build(:basic_property_configuration)
+      }
+
+      it 'returns an instance of YAMLLoader when presented with a .yaml file' do
+        expect(Configruous::FileFactory.load('some_file.yaml')).to be_instance_of(Configruous::YAMLLoader)
+      end
+
+      it 'returns an instance of PropertyLoader when presented with a .yaml file' do
+        expect(Configruous::FileFactory.load('some_file.properties')).to be_instance_of(Configruous::PropertyLoader)
+      end
+
+      it 'throws an ArgumentError when presented with an unsupported file type' do
+        expect{Configruous::FileFactory.load('some_unsupported.file')}.to raise_error(ArgumentError)
+      end
+    end
+  end
+
+  describe 'Helpers' do
+    describe '#deep_merge' do
+      it 'merges two hashes successfully' do
+        expect{Configruous::Helpers.deep_merge({elem: 'test'}, {elem2: 'test2'})}.not_to raise_error
+      end
+
+      it 'does a single level merge correctly' do
+        expect(Configruous::Helpers.deep_merge({elem: 'test'}, {elem2: 'test2'})).to eql({elem: 'test', elem2: 'test2'})
+      end
+
+      it 'does a nested merge correctly' do
+        expect(Configruous::Helpers.deep_merge({elem: {nested: 's'}}, {elem: {nested2: 't'}})).to eql({elem: {nested: 's', nested2: 't'}})
+      end
+
+      it 'can merge arrays' do
+        expect(Configruous::Helpers.deep_merge({elem: [ 'something' ]}, {elem: [ 'something2' ]})).to eql({elem: ['something', 'something2']})
+      end
+
+      it 'will bring in an array object' do
+        expect(Configruous::Helpers.deep_merge({elem: ['something']}, {elem2: 'something_else'})).to eql({elem: ['something'], elem2: 'something_else'})
       end
     end
   end
