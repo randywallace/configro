@@ -89,10 +89,12 @@ module Configruous
       end
     end
 
-    def list_found_keys
+    def to_params prefix="config/testing"
+      ret = Hash.new
       @data.each do |config|
-        puts "Storing /config/testing/#{config.environment}/#{config.filename}/#{config.key}: #{config.value}"
+        ret["/#{prefix}/#{config.environment}/#{config.filename}/#{config.key}"] = config.value
       end
+      ret
     end
 
     def load_data dta

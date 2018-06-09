@@ -102,21 +102,18 @@ RSpec.describe Configruous do
     end
   end
 
-  describe 'when loading YAML configurations' do
-    let(:filename) { 'some_file.yaml' }
-    let(:client)   { Configruous::YAMLLoader.new(filename) }
-
+  shared_examples "a Loader Object" do
     before(:each) {
-      allow(YAML).to receive(:load_file).with(filename).and_return build(:basic_yaml_configuration)
+      allow(mockclass).to receive(mockloadmethod).with(filename).and_return basic_configuration
     }
 
     describe '#new' do
-      it 'loads the yaml stub' do
-        expect(client.raw_data).to eql(build(:basic_yaml_configuration))
+      it 'loads the stub' do
+        expect(client.raw_data).to eql(raw_data_response)
       end
 
       it 'sets the environment when given' do
-        expect(Configruous::YAMLLoader.new(filename, environment: 'test').environment).to eql('test')
+        expect(client_with_env.environment).to eql('test')
       end
 
       it 'converts the data to configurations' do
@@ -124,8 +121,7 @@ RSpec.describe Configruous do
       end
 
       it 'bails when a bad key name is provided' do
-        dta = build(:basic_yaml_configuration, "a-parameter_name.&&.that_is_not_allowed".to_sym => 'data')
-        allow(YAML).to receive(:load_file).with(filename).and_return dta
+        allow(mockclass).to receive(mockloadmethod).with(filename).and_return basic_configuration_with_error
         expect{client.data}.to raise_error(RuntimeError)
       end
     end
@@ -140,42 +136,59 @@ RSpec.describe Configruous do
         expect{client.store!}.not_to raise_error
       end
     end
+    describe '#to_params' do
+      it 'successfully creates param hash' do
+        expect{client.to_params}.not_to raise_error
+        expect(client.to_params).to eql(expected_params)
+      end
 
+      it 'properly supports a prefix' do
+        expect(client.to_params('test').keys.sample).to start_with('/test')
+      end
+    end
   end
 
-  describe 'when loading Propery file configurations' do
-    let(:filename) { 'some_file.properties' }
-    let(:client)   { Configruous::PropertyLoader.new(filename) }
-
-    before(:each) {
-      allow(IniFile).to receive(:load).with(filename).and_return build(:basic_property_configuration)
-    }
-
-    describe '#new' do
-      it 'loads the ini stub' do
-        expect(client.raw_data).to eql(build(:basic_property_configuration)["global"])
-      end
-
-      it 'converts the data to configurations' do
-        expect{client.data}.not_to raise_error
-      end
-
-      it 'bails when a bad key name is provided' do
-        dta = build(:bad_property_configuration)
-        allow(IniFile).to receive(:load).with(filename).and_return dta
-        expect{client.data}.to raise_error(RuntimeError)
-      end
+  describe 'YAMLLoader' do
+    it_behaves_like "a Loader Object" do
+      let(:mockclass) { YAML }
+      let(:mockloadmethod)  { :load_file }
+      let(:filename) { 'some_file.yaml' }
+      let(:client)   { Configruous::YAMLLoader.new(filename) }
+      let(:client_with_env) { Configruous::YAMLLoader.new(filename, environment: 'test') }
+      let(:basic_configuration) { build(:basic_yaml_configuration) }
+      let(:raw_data_response) { basic_configuration }
+      let(:basic_configuration_with_error) { build(:basic_yaml_configuration, "a-parameter_name.&&.that_is_not_allowed".to_sym => 'data') }
+      let(:expected_params) {
+          {"/config/testing/prod/some_file.yaml/some_snake_case_setting"=>"bar",
+           "/config/testing/prod/some_file.yaml/someCamelCaseSetting"=>"foo",
+           "/config/testing/prod/some_file.yaml/a_number"=>45,
+           "/config/testing/prod/some_file.yaml/a_float"=>3.14,
+           "/config/testing/prod/some_file.yaml/a_string"=>"foobar",
+           "/config/testing/prod/some_file.yaml/some_sub_config/name"=>"Joseph",
+           "/config/testing/prod/some_file.yaml/some_sub_config/an_array/0"=>"white",
+           "/config/testing/prod/some_file.yaml/some_sub_config/an_array/1"=>"orange",
+           "/config/testing/prod/some_file.yaml/some_other_sub_config/name"=>"Jessica",
+           "/config/testing/prod/some_file.yaml/some_other_sub_config/an_array/0"=>"white",
+           "/config/testing/prod/some_file.yaml/some_other_sub_config/an_array/1"=>"orange",
+           "/config/testing/prod/some_file.yaml/array_with_hash/name"=>"Sebastian",
+           "/config/testing/prod/some_file.yaml/array_with_hash/an_array/0/keyone"=>10,
+           "/config/testing/prod/some_file.yaml/array_with_hash/an_array/1/keytwo"=>11
+          }
+      }
     end
+  end
 
-    describe '#store!' do
-      it 'successfully stores configs to SSM' do
-        expect{client.store!}.not_to raise_error
-      end
-
-      it 'stores a new parameter when one does not already exist' do
-        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, Aws::SSM::Errors::ParameterNotFound.new('', ''))
-        expect{client.store!}.not_to raise_error
-      end
+  describe 'PropertyLoader' do
+    it_behaves_like "a Loader Object" do
+      let(:mockclass) { IniFile }
+      let(:mockloadmethod) { :load }
+      let(:filename) { 'some_file.properties' }
+      let(:client)   { Configruous::PropertyLoader.new(filename) }
+      let(:client_with_env) { Configruous::PropertyLoader.new(filename, environment: 'test') }
+      let(:basic_configuration) { build(:basic_property_configuration) }
+      let(:raw_data_response) { basic_configuration["global"] }
+      let(:basic_configuration_with_error) { build(:bad_property_configuration) }
+      let(:expected_params) { {"/config/testing/prod/some_file.properties/name"=>"Sebastian", "/config/testing/prod/some_file.properties/family"=>"Wilson"} }
     end
   end
 
@@ -190,7 +203,7 @@ RSpec.describe Configruous do
         expect(Configruous::FileFactory.load('some_file.yaml')).to be_instance_of(Configruous::YAMLLoader)
       end
 
-      it 'returns an instance of PropertyLoader when presented with a .yaml file' do
+      it 'returns an instance of PropertyLoader when presented with a .properties file' do
         expect(Configruous::FileFactory.load('some_file.properties')).to be_instance_of(Configruous::PropertyLoader)
       end
 
