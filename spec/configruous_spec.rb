@@ -121,6 +121,16 @@ RSpec.describe Configruous do
           puts Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype.join("\n")
         end
       end
+
+      describe "unsupported file" do
+        let(:filename) { 'something.ext' }
+        let(:trait) { :properties }
+        let(:number_of_parameters) { 10 }
+
+        it "prints the resulting configuration file without issue" do
+          expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype}.to raise_error(ArgumentError)
+        end
+      end
     end
   end
 
