@@ -63,17 +63,17 @@ module Configruous
       load_data @raw_data
     end
 
-    def store!
+    def store! prefix="config/testing"
       ssm_client = SSMClient.instance.client
-      @data.each do |config|
-        param_name = "/config/testing/#{config.environment}/#{config.filename}/#{config.key}"
+      to_params(prefix).each do |key, value|
+        param_name = key
         begin
           existing_param = SSMClient.instance.client.get_parameter(name: param_name).parameter
-          if existing_param.value.to_s != config.value.to_s
+          if existing_param.value.to_s != value.to_s
             #puts "Updating #{param_name} by setting #{existing_param.value.to_s} to #{config.value.to_s}"
             ssm_client.put_parameter({
               name: param_name,
-              value: config.value.to_s,
+              value: value.to_s,
               type: "String",
               overwrite: true
             }).inspect
@@ -82,7 +82,7 @@ module Configruous
           #puts "Parameter not found; Setting #{param_name} to #{config.value.to_s}"
           ssm_client.put_parameter({
             name: param_name,
-            value: config.value.to_s,
+            value: value.to_s,
             type: "String",
           })
         end
@@ -157,5 +157,62 @@ module Configruous
     end
   end
 
+  class RestoreFileFromSSM
+    def initialize environment, filename, prefix='/config'
+      @environment = environment
+      @filename = filename
+      @prefix = prefix
+    end
+
+    def to_params
+      response = SSMClient.instance.client.get_parameters_by_path(path: @prefix + '/' + @environment + '/' + @filename + '/')
+      response.to_h[:parameters]
+    end
+
+    def to_filetype
+      case File.extname(@filename)
+      when /\.ya?ml|\.config/
+        to_yaml
+      when /\.properties/
+        to_properties
+      else
+        raise ArgumentError.new("#{@filename} is not a supported file type")
+      end
+    end
+
+    def to_properties
+      res = Array.new
+      to_params.each do |parameter|
+        filename = parameter[:name].split('/')[3]
+        environment = parameter[:name].split('/')[2]
+        puts "#{parameter[:name]}: #{parameter[:value]} - #{filename}: #{environment}"
+        arr = parameter[:name].split('/')[4..-1]
+        raise ArgumentError.new "I don't know what to do with #{arr.inspect} in a properties file" if arr.size > 1
+        res << "#{arr.first} = #{parameter[:value]}"
+      end
+      res
+    end
+
+    def to_yaml
+      res = Hash.new
+      to_params.each do |parameter|
+        filename = parameter[:name].split('/')[3]
+        environment = parameter[:name].split('/')[2]
+        puts "#{parameter[:name]}: #{parameter[:value]} - #{filename}: #{environment}"
+        arr = parameter[:name].split('/')[4..-1]
+        arr << parameter[:value]
+        hsh = arr.reverse.inject do |mem, var|
+          if var =~ /^[-+]?[0-9]([0-9]*)?$/
+            [ mem ]
+          else
+            { var => mem }
+          end
+        end
+        res = Helpers.deep_merge(res, hsh)
+      end
+      res
+    end
+  end
 end
+
 

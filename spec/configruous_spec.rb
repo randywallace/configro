@@ -70,6 +70,60 @@ RSpec.describe Configruous do
     end
   end
 
+  describe 'RestoreFileFromSSM' do
+    before(:each) {
+      allow(Aws::SSM::Client).to receive(:new).and_return( Aws::SSM::Client.new(stub_responses: true) )
+    }
+
+    let(:configruous_client) { Configruous::SSMClient.instance.client }
+
+    describe "#to_params" do
+      before(:each) {
+        response = build(:ssm_get_parameter_by_path_response, :yaml)
+        configruous_client.stub_responses(:get_parameters_by_path, response)
+      }
+
+      it "returns a hash successfully" do
+        expect{Configruous::RestoreFileFromSSM.new('environ', 'file.ext').to_params}.to_not raise_error
+      end
+
+      it "returns an array of hashes" do
+        expect(Configruous::RestoreFileFromSSM.new('environ', 'file.ext').to_params).to be_instance_of(Array)
+      end
+    end
+
+    describe "#to_filetype" do
+      before(:each) {
+        response = build(:ssm_get_parameter_by_path_response, trait, number_of_parameters: number_of_parameters, filename: filename, environment: environment)
+        configruous_client.stub_responses(:get_parameters_by_path, response)
+      }
+
+      let (:environment) { 'production' }
+
+      describe "yaml file" do
+        let(:filename) { 'something.yaml' }
+        let(:trait) { :yaml }
+        let(:number_of_parameters) { 1 }
+
+        it "prints the resulting configuration file without issue" do
+          expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype}.to_not raise_error
+          puts Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype.to_yaml
+        end
+      end
+
+      describe "properties file" do
+        let(:filename) { 'something.properties' }
+        let(:trait) { :properties }
+        let(:number_of_parameters) { 10 }
+
+        it "prints the resulting configuration file without issue" do
+          expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype}.to_not raise_error
+          puts Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype.join("\n")
+        end
+      end
+    end
+  end
+
   describe 'when leveraging FactoryBot' do
     it 'returns a stringified hash factory' do
       expect(build(:static_stringified_hash, :allows_arrays)).to eql({"name"=>"Sebastian", "an_array"=>["white", "orange"]})

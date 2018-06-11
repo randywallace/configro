@@ -35,15 +35,33 @@ FactoryBot.define do
     initialize_with { attributes.stringify_keys }
   end
 
-  sequence(:name) { |n| "/config/environ/file.ext/config_name/#{n}" }
-  sequence(:value) { |n| "#{n}" }
+  sequence(:name) { |n| "#{n}" }
+  sequence(:value) { |n| n }
   sequence(:version) { |n| n }
 
   factory :basic_ssm_parameter, class:Aws::SSM::Types::Parameter do
-    name
+    transient do
+      filename 'blah.ext'
+      environment 'prod'
+    end
+
+    name { "/config/#{environment}/#{filename}/config_name/SomeConfiguration" + generate(:name) }
     type "String"
     value
     version
+
+    trait :type2 do
+      name { "/config/#{environment}/#{filename}/config_name2/typetwo" + generate(:name) }
+    end
+
+    trait :type3 do
+      name { "/config/#{environment}/#{filename}/config_namex" + generate(:name) }
+    end
+
+    trait :array1 do
+      name { "/config/#{environment}/#{filename}/arr/" + generate(:name)}
+    end
+
     initialize_with { Aws::SSM::Types::Parameter.new(attributes) }
   end
 
@@ -54,19 +72,39 @@ FactoryBot.define do
       value
       version
     end
+
     parameter do
       build( :basic_ssm_parameter, name: name, type: type, value: value, version: version )
     end
+
     initialize_with { Aws::SSM::Types::GetParameterResult.new(attributes) }
   end
 
 
   factory :ssm_get_parameter_by_path_response, class:Aws::SSM::Types::GetParametersByPathResult do
 
+    transient do
+      number_of_parameters 10
+      filename 'blah.ext'
+      environment 'prod'
+    end
+
     initialize_with { Aws::SSM::Types::GetParametersByPathResult.new(attributes) }
 
-    after(:build) do |profile|
-      profile.parameters = build_list(:basic_ssm_parameter, 10)
+    trait :yaml do
+      after(:build) do |result, evaluator|
+        result.parameters = build_list  :basic_ssm_parameter, evaluator.number_of_parameters,         environment: evaluator.environment, filename: evaluator.filename
+        result.parameters += build_list :basic_ssm_parameter, evaluator.number_of_parameters, :type2, environment: evaluator.environment, filename: evaluator.filename
+        result.parameters += build_list :basic_ssm_parameter, evaluator.number_of_parameters, :type3, environment: evaluator.environment, filename: evaluator.filename
+        FactoryBot.rewind_sequences
+        result.parameters += build_list :basic_ssm_parameter, evaluator.number_of_parameters, :array1,environment: evaluator.environment, filename: evaluator.filename
+      end
+    end
+
+    trait :properties do
+      after(:build) do |result, evaluator|
+        result.parameters = build_list :basic_ssm_parameter, evaluator.number_of_parameters, :type3, environment: evaluator.environment, filename: evaluator.filename
+      end
     end
   end
 
