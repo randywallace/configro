@@ -4,7 +4,7 @@ require "yaml"
 require "aws-sdk-ssm"
 require "inifile"
 require "ostruct"
-#require 'hashdiff'
+require 'hashdiff'
 
 module Configruous
   module Helpers
@@ -63,12 +63,30 @@ module Configruous
       load_data @raw_data
     end
 
+    def diff prefix="config/testing"
+      ssm_client = SSMClient.instance.client
+      response_hash = Hash.new 
+      to_params(prefix).each do |key, value|
+        begin
+          existing_param = ssm_client.get_parameter(name: key).parameter
+          if existing_param.value.to_s != value.to_s
+            response_hash[:update] = Hash.new unless response_hash.has_key? :update
+            response_hash[:update][key] = [existing_param.value, value]
+          end
+        rescue Aws::SSM::Errors::ParameterNotFound
+          response_hash[:add] = Hash.new unless response_hash.has_key? :add
+          response_hash[:add][key] = value
+        end
+      end
+      response_hash
+    end
+
     def store! prefix="config/testing"
       ssm_client = SSMClient.instance.client
       to_params(prefix).each do |key, value|
         param_name = key
         begin
-          existing_param = SSMClient.instance.client.get_parameter(name: param_name).parameter
+          existing_param = ssm_client.get_parameter(name: param_name).parameter
           if existing_param.value.to_s != value.to_s
             #puts "Updating #{param_name} by setting #{existing_param.value.to_s} to #{config.value.to_s}"
             ssm_client.put_parameter({
@@ -184,8 +202,9 @@ module Configruous
       res = Array.new
       to_params.each do |parameter|
         filename = parameter[:name].split('/')[3]
+        raise RuntimeError.new("#{@filename} != #{filename}") if @filename != filename
         environment = parameter[:name].split('/')[2]
-        puts "#{parameter[:name]}: #{parameter[:value]} - #{filename}: #{environment}"
+        raise RuntimeError.new("#{@environment} != #{environment}") if @environment != environment
         arr = parameter[:name].split('/')[4..-1]
         raise ArgumentError.new "I don't know what to do with #{arr.inspect} in a properties file" if arr.size > 1
         res << "#{arr.first} = #{parameter[:value]}"
@@ -197,8 +216,9 @@ module Configruous
       res = Hash.new
       to_params.each do |parameter|
         filename = parameter[:name].split('/')[3]
+        raise RuntimeError.new("#{@filename} != #{filename}") if @filename != filename
         environment = parameter[:name].split('/')[2]
-        puts "#{parameter[:name]}: #{parameter[:value]} - #{filename}: #{environment}"
+        raise RuntimeError.new("#{@environment} != #{environment}") if @environment != environment
         arr = parameter[:name].split('/')[4..-1]
         arr << parameter[:value]
         hsh = arr.reverse.inject do |mem, var|

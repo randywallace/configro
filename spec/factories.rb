@@ -106,6 +106,7 @@ FactoryBot.define do
         result.parameters = build_list :basic_ssm_parameter, evaluator.number_of_parameters, :type3, environment: evaluator.environment, filename: evaluator.filename
       end
     end
+
   end
 
   factory :ssm_put_parameter_response, class:Aws::SSM::Types::PutParameterResult do
