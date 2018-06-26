@@ -63,29 +63,63 @@ module Configruous
       load_data @raw_data
     end
 
-    def diff prefix="config/testing"
+    def ssmclient_iterator prefix, &block
       ssm_client = SSMClient.instance.client
-      response_hash = Hash.new 
       to_params(prefix).each do |key, value|
         begin
           existing_param = ssm_client.get_parameter(name: key).parameter
           if existing_param.value.to_s != value.to_s
-            response_hash[:update] = Hash.new unless response_hash.has_key? :update
-            response_hash[:update][key] = [existing_param.value, value]
+            block.call(:changed, key, existing_param.value, value)
           else
-            response_hash[:unchanged] = Hash.new unless response_hash.has_key? :unchanged
-            response_hash[:unchanged][key] = value
+            block.call(:unchanged, key, existing_param.value, value)
           end
         rescue Aws::SSM::Errors::ParameterNotFound
+          block.call(:missing, key, nil, value)
+        end
+      end
+    end
+
+
+    def diff prefix="config/testing"
+      response_hash = Hash.new 
+      ssmclient_iterator prefix do |state, key, existing, new|
+        case state
+        when :changed
+          response_hash[:update] = Hash.new unless response_hash.has_key? :update
+          response_hash[:update][key] = [existing, new]
+        when :unchanged
+          response_hash[:unchanged] = Hash.new unless response_hash.has_key? :unchanged
+          response_hash[:unchanged][key] = new
+        when :missing
           response_hash[:add] = Hash.new unless response_hash.has_key? :add
-          response_hash[:add][key] = value
+          response_hash[:add][key] = new
         end
       end
       response_hash
     end
 
-    def diff_print prefix="config/testing"
+    def store! prefix="config/testing"
       ssm_client = SSMClient.instance.client
+      ssmclient_iterator prefix do |state, key, existing, new|
+        case state
+        when :changed
+          ssm_client.put_parameter({
+            name: key,
+            value: new.to_s,
+            type: "String",
+            overwrite: true
+          })
+        when :missing
+          ssm_client.put_parameter({
+            name: key,
+            value: new.to_s,
+            type: "String"
+          })
+        end
+      end
+    end
+
+    def diff_print prefix="config/testing"
       diff.each do |k, v|
         case k
         when :update
@@ -103,32 +137,6 @@ module Configruous
           v.each do |arr|
             puts "   #{arr[0]}: #{arr[1]}"
           end
-        end
-      end
-    end
-
-    def store! prefix="config/testing"
-      ssm_client = SSMClient.instance.client
-      to_params(prefix).each do |key, value|
-        param_name = key
-        begin
-          existing_param = ssm_client.get_parameter(name: param_name).parameter
-          if existing_param.value.to_s != value.to_s
-            #puts "Updating #{param_name} by setting #{existing_param.value.to_s} to #{config.value.to_s}"
-            ssm_client.put_parameter({
-              name: param_name,
-              value: value.to_s,
-              type: "String",
-              overwrite: true
-            }).inspect
-          end
-        rescue Aws::SSM::Errors::ParameterNotFound
-          #puts "Parameter not found; Setting #{param_name} to #{config.value.to_s}"
-          ssm_client.put_parameter({
-            name: param_name,
-            value: value.to_s,
-            type: "String",
-          })
         end
       end
     end
