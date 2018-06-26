@@ -72,6 +72,9 @@ module Configruous
           if existing_param.value.to_s != value.to_s
             response_hash[:update] = Hash.new unless response_hash.has_key? :update
             response_hash[:update][key] = [existing_param.value, value]
+          else
+            response_hash[:unchanged] = Hash.new unless response_hash.has_key? :unchanged
+            response_hash[:unchanged][key] = value
           end
         rescue Aws::SSM::Errors::ParameterNotFound
           response_hash[:add] = Hash.new unless response_hash.has_key? :add
@@ -79,6 +82,29 @@ module Configruous
         end
       end
       response_hash
+    end
+
+    def diff_print prefix="config/testing"
+      ssm_client = SSMClient.instance.client
+      diff.each do |k, v|
+        case k
+        when :update
+          puts "Updates"
+          v.each do |arr|
+            puts " ~ #{arr[0]}: #{arr[1].join(' => ')}"
+          end
+        when :add
+          puts "Additions"
+          v.each do |arr|
+            puts " + #{arr[0]}: #{arr[1]}"
+          end
+        when :unchanged
+          puts "Unchanged"
+          v.each do |arr|
+            puts "   #{arr[0]}: #{arr[1]}"
+          end
+        end
+      end
     end
 
     def store! prefix="config/testing"

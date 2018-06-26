@@ -199,7 +199,7 @@ RSpec.describe Configruous do
       end
     end
 
-    describe 'diff' do
+    describe '#diff' do
       it 'successfully generates a diff' do
         expect{client.diff}.not_to raise_error
       end
@@ -216,16 +216,23 @@ RSpec.describe Configruous do
       it 'indicates no change' do
         ssm_responses = expected_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
         Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
-        response = client.diff
-        expect(response.keys).to eql([])
+        expect(client.diff.keys).to eql([:unchanged])
       end
 
       it 'indicates an update and an add' do
         ssm_responses = changed_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
         ssm_responses << Aws::SSM::Errors::ParameterNotFound.new('', '')
         Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
-        response = client.diff
-        expect(response.keys).to eql([:update, :add])
+        expect(client.diff.keys).to satisfy { |arr| ( arr & [:update, :add] ).length == 2 }
+      end
+    end
+
+    describe '#diff_print' do
+      it 'successfully prints a diff' do
+        ssm_responses = changed_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
+        ssm_responses << Aws::SSM::Errors::ParameterNotFound.new('', '')
+        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
+        expect{client.diff_print}.not_to raise_error
       end
     end
 
