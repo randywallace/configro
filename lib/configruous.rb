@@ -153,9 +153,37 @@ module Configruous
         #    puts "   #{arr[0]}: #{arr[1]}"
         #  end
         when :ssm_only
-          puts "Deleted in SSM"
+          puts "Deleted"
           v.each do |arr|
             puts " - #{arr[0]}: #{arr[1]}"
+          end
+        end
+      end
+    end
+
+    def diff_print_restore prefix="config/testing"
+      prefix_offset = prefix.split('/').length
+      diff.each do |k, v|
+        case k
+        when :update
+          puts "Updates"
+          v.each do |arr|
+            puts " ~ #{arr[0].split('/')[(prefix_offset+3)..-1].join('.')}: #{arr[1].reverse.join(' => ')}"
+          end
+        when :add
+          puts "Removals"
+          v.each do |arr|
+            puts " - #{arr[0].split('/')[(prefix_offset+3)..-1].join('.')}: #{arr[1]}"
+          end
+        #when :unchanged
+        #  puts "Unchanged"
+        #  v.each do |arr|
+        #    puts "   #{arr[0]}: #{arr[1]}"
+        #  end
+        when :ssm_only
+          puts "Added"
+          v.each do |arr|
+            puts " + #{arr[0].split('/')[(prefix_offset+3)..-1].join('.')}: #{arr[1]}"
           end
         end
       end

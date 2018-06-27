@@ -9,6 +9,8 @@
 /tmp/
 *.swp
 /bin/
+*.yaml
+*.properties
 
 # rspec failure tracking
 .rspec_status

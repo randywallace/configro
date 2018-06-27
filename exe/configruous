@@ -14,6 +14,11 @@ class CLI < Thor
 
   desc "restore ENVIRONMENT FILENAME", "Restore a configuration file from SSM"
   def restore(environment, filename)
+    if Pathname.new(filename).exist?
+      puts '** This is a dry run **' if options[:'dry-run']
+      puts '** Rerun with --no-dry-run to commit changes **' if options[:'dry-run']
+      Configruous::FileFactory.load(filename, environment: environment).diff_print_restore
+    end
     Configruous::RestoreFileFromSSM.new(environment, filename).save! unless options[:'dry-run']
   end
 
@@ -21,6 +26,7 @@ class CLI < Thor
   def upload(environment, filename)
     file_obj = Configruous::FileFactory.load(filename, environment: environment)
     puts '** This is a dry run **' if options[:'dry-run']
+    puts '** Rerun with --no-dry-run to commit changes **' if options[:'dry-run']
     file_obj.diff_print
     file_obj.store! unless options[:'dry-run']
   end
