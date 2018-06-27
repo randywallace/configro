@@ -1,46 +1,68 @@
 #!/usr/bin/env ruby
 
 require "bundler/setup"
-require "hanami/cli"
+require "thor"
 require "configruous"
 
-module Configruous
-  module CLI
-    module Commands
-      extend Hanami::CLI::Registry
+class CLI < Thor
 
-      class Version < Hanami::CLI::Command
-        desc "Print Version"
-        def call(*)
-          puts Configruous::VERSION
-        end
-      end
-
-      class RestoreFile < Hanami::CLI::Command
-        desc "Restore a configuration file from SSM"
-        argument :filename, required: true, desc: "Filename to restore"
-        argument :environment, required: true, desc: "Environment to restore to"
-        def call(environment:, filename:)
-          Configruous::RestoreFileFromSSM.new(environment, filename).save!
-        end
-      end
-
-      class UploadFile < Hanami::CLI::Command
-        desc "Store Configuration in SSM"
-        argument :filename, required: true, desc: "Filename to restore"
-        argument :environment, required: true, desc: "Environment to store to"
-        def call(environment:, filename:)
-          file_obj = Configruous::FileFactory.load(filename, environment: environment)
-          file_obj.diff_print
-          file_obj.store!
-        end
-      end
-
-      register "version", Version, aliases: ["v", "-v", "--version"]
-      register "restore", RestoreFile
-      register "upload", UploadFile
-    end
+  desc "version", "Get the current Version of Configruous"
+  def version
+    puts Configruous::VERSION
   end
+
+  desc "restore ENVIRONMENT FILENAME", "Restore a configuration file from SSM"
+  def restore(environment, filename)
+    Configruous::RestoreFileFromSSM.new(environment, filename).save!
+  end
+
+  desc "upload ENVIRONMENT FILENAME", "Store Configuration in SSM"
+  def upload(environment, filename)
+    file_obj = Configruous::FileFactory.load(filename, environment: environment)
+    file_obj.diff_print
+    file_obj.store!
+  end
+
 end
 
-Hanami::CLI.new(Configruous::CLI::Commands).call
+#module Configruous
+#  module CLI
+#    module Commands
+#      extend Hanami::CLI::Registry
+#
+#      class Version < Hanami::CLI::Command
+#        desc "Print Version"
+#        def call(*)
+#          puts Configruous::VERSION
+#        end
+#      end
+#
+#      class RestoreFile < Hanami::CLI::Command
+#        desc "Restore a configuration file from SSM"
+#        argument :filename, required: true, desc: "Filename to restore"
+#        argument :environment, required: true, desc: "Environment to restore to"
+#        def call(environment:, filename:)
+#          Configruous::RestoreFileFromSSM.new(environment, filename).save!
+#        end
+#      end
+#
+#      class UploadFile < Hanami::CLI::Command
+#        desc "Store Configuration in SSM"
+#        argument :filename, required: true, desc: "Filename to restore"
+#        argument :environment, required: true, desc: "Environment to store to"
+#        def call(environment:, filename:)
+#          file_obj = Configruous::FileFactory.load(filename, environment: environment)
+#          file_obj.diff_print
+#          file_obj.store!
+#        end
+#      end
+#
+#      register "version", Version, aliases: ["v", "-v", "--version"]
+#      register "restore", RestoreFile
+#      register "upload", UploadFile
+#    end
+#  end
+#end
+
+CLI.start(ARGV)
+#Hanami::CLI.new(Configruous::CLI::Commands).call
