@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "aws-sdk-ssm"
   spec.add_dependency "inifile"
-  spec.add_dependency "hashdiff"
+  spec.add_dependency "hanami-cli"
 
   spec.add_development_dependency "bundler", "~> 1.16"
   spec.add_development_dependency "rake", "~> 10.0"

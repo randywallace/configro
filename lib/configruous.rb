@@ -4,13 +4,11 @@ require "yaml"
 require "aws-sdk-ssm"
 require "inifile"
 require "ostruct"
-require 'hashdiff'
 
 module Configruous
   module Helpers
     class << self
       def deep_merge h1, h2
-        # TODO: Handle array merges
         if h1.respond_to? :merge
           h1.merge(h2) { |key, h1_elem, h2_elem| deep_merge(h1_elem, h2_elem) }
         else
@@ -64,21 +62,31 @@ module Configruous
     end
 
     def ssmclient_iterator prefix, &block
+      request_path = '/' + prefix + '/' + @environment + '/' + @filename + '/'
+      existing = Array.new
       ssm_client = SSMClient.instance.client
+      ssm_client.get_parameters_by_path(path: request_path, recursive: true).each do |response|
+        existing += response.to_h[:parameters] unless response.parameters.nil?
+      end
       to_params(prefix).each do |key, value|
         begin
-          existing_param = ssm_client.get_parameter(name: key).parameter
-          if existing_param.value.to_s != value.to_s
-            block.call(:changed, key, existing_param.value, value)
+          existing_param = existing.select{|record| record[:name] == key} 
+          unless existing_param.empty?
+            if existing_param.first[:value].to_s != value.to_s
+              block.call(:changed, key, existing_param.first[:value], value)
+            else
+              block.call(:unchanged, key, existing_param.first[:value], value)
+            end
+            existing.delete_if{|record| record[:name] == key}
           else
-            block.call(:unchanged, key, existing_param.value, value)
+            block.call(:missing, key, nil, value)
           end
-        rescue Aws::SSM::Errors::ParameterNotFound
-          block.call(:missing, key, nil, value)
         end
       end
+      existing.each do |not_in_ssm|
+        block.call(:ssm_only, not_in_ssm[:name], not_in_ssm[:value], nil)
+      end
     end
-
 
     def diff prefix="config/testing"
       response_hash = Hash.new 
@@ -93,6 +101,9 @@ module Configruous
         when :missing
           response_hash[:add] = Hash.new unless response_hash.has_key? :add
           response_hash[:add][key] = new
+        when :ssm_only
+          response_hash[:ssm_only] = Hash.new unless response_hash.has_key? :ssm_only
+          response_hash[:ssm_only][key] = existing
         end
       end
       response_hash
@@ -115,6 +126,10 @@ module Configruous
             value: new.to_s,
             type: "String"
           })
+        when :ssm_only
+          ssm_client.delete_parameter({
+            name: key
+          })
         end
       end
     end
@@ -132,10 +147,15 @@ module Configruous
           v.each do |arr|
             puts " + #{arr[0]}: #{arr[1]}"
           end
-        when :unchanged
-          puts "Unchanged"
+        #when :unchanged
+        #  puts "Unchanged"
+        #  v.each do |arr|
+        #    puts "   #{arr[0]}: #{arr[1]}"
+        #  end
+        when :ssm_only
+          puts "Deleted in SSM"
           v.each do |arr|
-            puts "   #{arr[0]}: #{arr[1]}"
+            puts " - #{arr[0]}: #{arr[1]}"
           end
         end
       end
@@ -196,12 +216,12 @@ module Configruous
 
   class FileFactory
     class << self
-      def load(filename)
+      def load(filename, options={})
         case File.extname(filename)
         when /\.ya?ml|\.config/
-          YAMLLoader.new(filename)
+          YAMLLoader.new(filename, options)
         when /\.properties/
-          PropertyLoader.new(filename)
+          PropertyLoader.new(filename, options)
         else
           raise ArgumentError.new("#{filename} is not a supported file type")
         end
@@ -210,36 +230,45 @@ module Configruous
   end
 
   class RestoreFileFromSSM
-    def initialize environment, filename, prefix='/config'
+    def initialize environment, filename, prefix='/config/testing'
       @environment = environment
       @filename = filename
       @prefix = prefix
     end
 
     def to_params
-      response = SSMClient.instance.client.get_parameters_by_path(path: @prefix + '/' + @environment + '/' + @filename + '/')
-      response.to_h[:parameters]
+      request_path = @prefix + '/' + @environment + '/' + @filename + '/'
+      resp = Array.new
+      SSMClient.instance.client.get_parameters_by_path(path: request_path, recursive: true).each do |response|
+        resp += response.to_h[:parameters]
+      end
+      resp
     end
 
     def to_filetype
       case File.extname(@filename)
       when /\.ya?ml|\.config/
-        to_yaml
+        to_yaml.to_yaml
       when /\.properties/
-        to_properties
+        to_properties.join("\n")
       else
         raise ArgumentError.new("#{@filename} is not a supported file type")
       end
     end
 
+    def save!
+      File.open(@filename, 'w') {|file| file.write(to_filetype)}
+    end
+
     def to_properties
+      prefix_offset = @prefix.split('/').length
       res = Array.new
       to_params.each do |parameter|
-        filename = parameter[:name].split('/')[3]
+        filename = parameter[:name].split('/')[prefix_offset+1]
         raise RuntimeError.new("#{@filename} != #{filename}") if @filename != filename
-        environment = parameter[:name].split('/')[2]
+        environment = parameter[:name].split('/')[prefix_offset]
         raise RuntimeError.new("#{@environment} != #{environment}") if @environment != environment
-        arr = parameter[:name].split('/')[4..-1]
+        arr = parameter[:name].split('/')[(prefix_offset+2)..-1]
         raise ArgumentError.new "I don't know what to do with #{arr.inspect} in a properties file" if arr.size > 1
         res << "#{arr.first} = #{parameter[:value]}"
       end
@@ -248,12 +277,13 @@ module Configruous
 
     def to_yaml
       res = Hash.new
+      prefix_offset = @prefix.split('/').length
       to_params.each do |parameter|
-        filename = parameter[:name].split('/')[3]
+        filename = parameter[:name].split('/')[prefix_offset+1]
         raise RuntimeError.new("#{@filename} != #{filename}") if @filename != filename
-        environment = parameter[:name].split('/')[2]
+        environment = parameter[:name].split('/')[prefix_offset]
         raise RuntimeError.new("#{@environment} != #{environment}") if @environment != environment
-        arr = parameter[:name].split('/')[4..-1]
+        arr = parameter[:name].split('/')[(prefix_offset+2)..-1]
         arr << parameter[:value]
         hsh = arr.reverse.inject do |mem, var|
           if var =~ /^[-+]?[0-9]([0-9]*)?$/

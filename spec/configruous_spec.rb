@@ -94,6 +94,33 @@ RSpec.describe Configruous do
       end
     end
 
+    describe "save!" do
+      before(:each) {
+        configruous_client.stub_responses(:get_parameters_by_path, ssm_response)
+      }
+      let (:ssm_response) { build(:ssm_get_parameter_by_path_response, trait, number_of_parameters: number_of_parameters, filename: filename, environment: environment) }
+
+      describe "yaml file" do
+        let(:filename) { 'something.yaml' }
+        let(:trait) { :yaml }
+        let(:number_of_parameters) { 1 }
+
+        it 'saves a yaml file' do
+          expect{Configruous::RestoreFileFromSSM.new(environment, filename).save!}.to_not raise_error
+        end
+      end
+
+      describe "properties file" do
+        let(:filename) { 'something.properties' }
+        let(:trait) { :properties }
+        let(:number_of_parameters) { 10 }
+
+        it 'saves a properties file' do
+          expect{Configruous::RestoreFileFromSSM.new(environment, filename).save!}.to_not raise_error
+        end
+      end
+    end
+
     describe "#to_filetype" do
       before(:each) {
         configruous_client.stub_responses(:get_parameters_by_path, ssm_response)
@@ -108,7 +135,6 @@ RSpec.describe Configruous do
 
         it "prints the resulting configuration file without issue" do
           expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype}.to_not raise_error
-          expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype.to_yaml}.to_not raise_error
         end
 
         it "throws a RuntimeError if environment doesn't match detected environment from API" do
@@ -123,7 +149,6 @@ RSpec.describe Configruous do
 
         it "prints the resulting configuration file without issue" do
           expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype}.to_not raise_error
-          expect{Configruous::RestoreFileFromSSM.new(environment, filename).to_filetype.join("\n")}.to_not raise_error
         end
 
         it "throws a RuntimeError if environment doesn't match detected environment from API" do
@@ -177,7 +202,7 @@ RSpec.describe Configruous do
   shared_examples "a Loader Object" do
     before(:each) {
       allow(mockclass).to receive(mockloadmethod).with(filename).and_return basic_configuration
-      Configruous::SSMClient.instance.client.stub_responses(:get_parameter)
+      Configruous::SSMClient.instance.client.stub_responses(:get_parameters_by_path, basic_get_parameter_by_path_response)
     }
 
     describe '#new' do
@@ -205,33 +230,34 @@ RSpec.describe Configruous do
       end
 
       it 'indicates there are updates' do
-        expect(client.diff.keys).to eql([:update])
+        Configruous::SSMClient.instance.client.stub_responses(:get_parameters_by_path, basic_get_parameter_by_path_response_update)
+        expect(client.diff.keys).to eql([:update, :add])
       end
 
       it 'indicates there are additions' do
-        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, Aws::SSM::Errors::ParameterNotFound.new('', ''))
+        Configruous::SSMClient.instance.client.stub_responses(:get_parameters_by_path, Aws::SSM::Types::GetParametersByPathResult.new(Array.new))
         expect(client.diff.keys).to eql([:add])
       end
 
-      it 'indicates no change' do
-        ssm_responses = expected_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
-        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
-        expect(client.diff.keys).to eql([:unchanged])
-      end
+      #it 'indicates no change' do
+      #  ssm_responses = expected_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
+      #  Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
+      #  expect(client.diff.keys).to eql([:unchanged])
+      #end
 
-      it 'indicates an update and an add' do
-        ssm_responses = changed_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
-        ssm_responses << Aws::SSM::Errors::ParameterNotFound.new('', '')
-        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
-        expect(client.diff.keys).to satisfy { |arr| ( arr & [:update, :add] ).length == 2 }
-      end
+      #it 'indicates an update and an add' do
+      #  ssm_responses = changed_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
+      #  ssm_responses << Aws::SSM::Errors::ParameterNotFound.new('', '')
+      #  Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
+      #  expect(client.diff.keys).to satisfy { |arr| ( arr & [:update, :add] ).length == 2 }
+      #end
     end
 
     describe '#diff_print' do
       it 'successfully prints a diff' do
-        ssm_responses = changed_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
-        ssm_responses << Aws::SSM::Errors::ParameterNotFound.new('', '')
-        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
+        #ssm_responses = changed_params.to_a.collect{|item| build(:ssm_get_parameter_response, name: item[0], value: item[1])}
+        #ssm_responses << Aws::SSM::Errors::ParameterNotFound.new('', '')
+        #Configruous::SSMClient.instance.client.stub_responses(:get_parameter, *ssm_responses)
         expect{client.diff_print}.not_to raise_error
       end
     end
@@ -242,7 +268,7 @@ RSpec.describe Configruous do
       end
 
       it 'stores a new parameter when one does not already exist' do
-        Configruous::SSMClient.instance.client.stub_responses(:get_parameter, Aws::SSM::Errors::ParameterNotFound.new('', ''))
+        #Configruous::SSMClient.instance.client.stub_responses(:get_parameter, Aws::SSM::Errors::ParameterNotFound.new('', ''))
         expect{client.store!}.not_to raise_error
       end
     end
@@ -267,6 +293,8 @@ RSpec.describe Configruous do
       let(:client)   { Configruous::YAMLLoader.new(filename) }
       let(:client_with_env) { Configruous::YAMLLoader.new(filename, environment: 'test') }
       let(:basic_configuration) { build(:basic_yaml_configuration) }
+      let(:basic_get_parameter_by_path_response) { build(:ssm_get_parameter_by_path_response, :basic_yaml_update) }
+      let(:basic_get_parameter_by_path_response_update) { build(:ssm_get_parameter_by_path_response, :basic_yaml_update) }
       let(:raw_data_response) { basic_configuration }
       let(:basic_configuration_with_error) { build(:basic_yaml_configuration, "a-parameter_name.&&.that_is_not_allowed".to_sym => 'data') }
       let(:expected_params) {
@@ -304,6 +332,8 @@ RSpec.describe Configruous do
       let(:client)   { Configruous::PropertyLoader.new(filename) }
       let(:client_with_env) { Configruous::PropertyLoader.new(filename, environment: 'test') }
       let(:basic_configuration) { build(:basic_property_configuration) }
+      let(:basic_get_parameter_by_path_response) { build(:ssm_get_parameter_by_path_response, :basic_properties_update) }
+      let(:basic_get_parameter_by_path_response_update) { build(:ssm_get_parameter_by_path_response, :basic_properties_update) }
       let(:raw_data_response) { basic_configuration["global"] }
       let(:basic_configuration_with_error) { build(:bad_property_configuration) }
       let(:expected_params) { {"/config/testing/prod/some_file.properties/name"=>"Sebastian", "/config/testing/prod/some_file.properties/family"=>"Wilson"} }

@@ -45,21 +45,21 @@ FactoryBot.define do
       environment 'prod'
     end
 
-    name { "/config/#{environment}/#{filename}/config_name/SomeConfiguration" + generate(:name) }
+    name { "/config/testing/#{environment}/#{filename}/config_name/SomeConfiguration" + generate(:name) }
     type "String"
     value
     version
 
     trait :type2 do
-      name { "/config/#{environment}/#{filename}/config_name2/typetwo" + generate(:name) }
+      name { "/config/testing/#{environment}/#{filename}/config_name2/typetwo" + generate(:name) }
     end
 
     trait :type3 do
-      name { "/config/#{environment}/#{filename}/config_namex" + generate(:name) }
+      name { "/config/testing/#{environment}/#{filename}/config_namex" + generate(:name) }
     end
 
     trait :array1 do
-      name { "/config/#{environment}/#{filename}/arr/" + generate(:name)}
+      name { "/config/testing/#{environment}/#{filename}/arr/" + generate(:name)}
     end
 
     initialize_with { Aws::SSM::Types::Parameter.new(attributes) }
@@ -101,9 +101,21 @@ FactoryBot.define do
       end
     end
 
+    trait :basic_yaml_update do
+      after(:build) do |result, evaluator|
+        result.parameters =  build_list :basic_ssm_parameter, 1, environment: evaluator.environment, filename: evaluator.filename, name: "/config/testing/prod/some_file.yaml/some_snake_case_setting", value: "ba" 
+      end
+    end
+
     trait :properties do
       after(:build) do |result, evaluator|
         result.parameters = build_list :basic_ssm_parameter, evaluator.number_of_parameters, :type3, environment: evaluator.environment, filename: evaluator.filename
+      end
+    end
+
+    trait :basic_properties_update do
+      after(:build) do |result, evaluator|
+        result.parameters =  build_list :basic_ssm_parameter, 1, environment: evaluator.environment, filename: evaluator.filename, name: "/config/testing/prod/some_file.properties/name", value: "Sebastia"
       end
     end
 
